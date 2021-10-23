@@ -6,10 +6,15 @@ public class Message {
 
     public Message(String raw) {
         int firstCol = raw.indexOf("|");
-        String header = raw.substring(0, firstCol);
 
-        this.header = new Header(header);
-        this.payload = raw.substring(firstCol+1);
+        try {
+            String header = raw.substring(0, firstCol);
+            this.header = new Header(header);
+            this.payload = raw.substring(firstCol+1);
+        } catch (StringIndexOutOfBoundsException e) {
+            System.err.println(e);
+            System.err.println(raw);
+        }
     }
 
     public Message(int id, MessageType type, int srcPid, int destPid, String payload) {
@@ -19,6 +24,7 @@ public class Message {
 
     public Message(int id, MessageType type, int srcPid, int destPid) {
         this.header = new Header(id, type, srcPid, destPid);
+        this.payload = "ACK";
     }
 
     public String Serialize() {

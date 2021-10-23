@@ -8,10 +8,12 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 public class Sender implements Runnable {
     private final List<Message> forSends;
+    private final ConcurrentLinkedQueue<Message> forACKs;
     private final ConcurrentSkipListSet<String> ack;
     private final HashMap<Integer, InetSocketAddress> addresses;
     private final int localPid;
@@ -21,11 +23,13 @@ public class Sender implements Runnable {
     private boolean stopped = false;
 
     public Sender(List<Message> forSends,
+                  ConcurrentLinkedQueue<Message> forACKs,
                   ConcurrentSkipListSet<String> ack,
                   int localPid, DatagramSocket socket,
                   HashMap<Integer, InetSocketAddress> addresses) {
         this.ack = ack;
         this.forSends = forSends;
+        this.forACKs = forACKs;
         this.addresses = addresses;
         this.localPid = localPid;
         this.socket = socket;
@@ -39,10 +43,8 @@ public class Sender implements Runnable {
                     send(forSend);
             }
 
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                System.err.println(e);
+            while (!stopped && !forACKs.isEmpty()) {
+                send(forACKs.poll());
             }
         }
 

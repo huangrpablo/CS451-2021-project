@@ -11,38 +11,41 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 public class Receiver implements Runnable {
     private final ConcurrentHashMap<String, Message> delivered;
+    private final ConcurrentLinkedQueue<Message> forACKs;
     private final ConcurrentSkipListSet<String> ack;
-    private final HashMap<Integer, InetSocketAddress> addresses;
 
     private final int localPid;
 
-    private final DatagramPacket packet;
     private final DatagramSocket socket;
+
+    private final byte[] buffer = new byte[65536];
 
     private boolean stopped = false;
 
     public Receiver(ConcurrentHashMap<String, Message> delivered,
+                    ConcurrentLinkedQueue<Message> forACKs,
                     ConcurrentSkipListSet<String> ack,
-                    int localPid, DatagramSocket socket,
-                    HashMap<Integer, InetSocketAddress> addresses) {
+                    int localPid, DatagramSocket socket) {
         this.ack = ack;
         this.delivered = delivered;
-        this.addresses = addresses;
+        this.forACKs = forACKs;
         this.localPid = localPid;
         this.socket = socket;
 
-        byte[] buffer = new byte[65536];
-        this.packet = new DatagramPacket(buffer, buffer.length);
+        System.out.printf("Start at %d", System.currentTimeMillis());
     }
 
     @Override
     public void run() {
         while(!stopped) {
             try {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
                 socket.receive(packet);
 
                 String raw = new String(packet.getData(),
@@ -77,33 +80,19 @@ public class Receiver implements Runnable {
         );
 
         delivered.putIfAbsent(key, data);
-        System.out.printf("%d:Recv Data=%s\n", localPid, data);
         ackIt(data);
     }
 
     private void ackIt(Message data) {
-        try {
-            Header header = data.header;
-            Message ack = new Message(
-                    header.getId(),
-                    MessageType.ACK,
-                    localPid,
-                    header.getSrcPid()
-            );
+        Header header = data.header;
+        Message ack = new Message(
+                header.getId(),
+                MessageType.ACK,
+                localPid,
+                header.getSrcPid()
+        );
 
-            int remotePid = data.header.getSrcPid();
-            InetSocketAddress remote = addresses.get(remotePid);
-
-            byte[] buffer = ack.Serialize().getBytes(StandardCharsets.UTF_8);
-            packet.setSocketAddress(remote);
-            packet.setData(buffer, 0, buffer.length);
-
-            socket.send(packet);
-
-            System.out.printf("%d:Send ACK=%s\n", localPid, ack);
-        } catch (IOException e) {
-            System.err.println(e);
-        }
+        forACKs.offer(ack);
     }
 
     private void processACK(Message ack) {
@@ -116,7 +105,6 @@ public class Receiver implements Runnable {
         );
 
         this.ack.add(key);
-        System.out.printf("%d:Recv ACK=%s\n", localPid, ack);
     }
 
     public void kill() {

@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -18,6 +19,7 @@ public class Link {
     private final List<Message> forSends;
     private final ConcurrentHashMap<String, Message> delivered;
     private ConcurrentSkipListSet<String> ack;
+    private ConcurrentLinkedQueue<Message> forACKs;
 
     private HashMap<Integer, InetSocketAddress> addresses;
     private DatagramSocket socket;
@@ -36,6 +38,7 @@ public class Link {
         this.forSends = new ArrayList<>();
         this.delivered = new ConcurrentHashMap<>();
         this.ack = new ConcurrentSkipListSet<>();
+        this.forACKs = new ConcurrentLinkedQueue<>();
 
         this.addresses = addresses;
 
@@ -46,8 +49,8 @@ public class Link {
             System.err.println(e);
         }
 
-        this.sender = new Sender(forSends, ack, pid, socket, addresses);
-        this.receiver = new Receiver(delivered, ack, pid, socket, addresses);
+        this.sender = new Sender(forSends, forACKs, ack, pid, socket, addresses);
+        this.receiver = new Receiver(delivered, forACKs, ack, pid, socket);
     }
 
     public Link(int pid, HashMap<Integer, InetSocketAddress> addresses, String output) {
