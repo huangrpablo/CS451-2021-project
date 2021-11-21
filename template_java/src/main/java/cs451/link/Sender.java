@@ -1,18 +1,17 @@
 package cs451.link;
 
-import cs451.message.Header;
-import cs451.message.Message;
+import cs451.link.message.Header;
+import cs451.link.message.Message;
 
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 public class Sender implements Runnable {
-    private final List<Message> forSends;
+    private final ConcurrentLinkedQueue<Message> forSends;
     private final ConcurrentLinkedQueue<Message> forACKs;
     private final ConcurrentSkipListSet<String> ack;
     private final HashMap<Integer, InetSocketAddress> addresses;
@@ -22,7 +21,7 @@ public class Sender implements Runnable {
 
     private boolean stopped = false;
 
-    public Sender(List<Message> forSends,
+    public Sender(ConcurrentLinkedQueue<Message> forSends,
                   ConcurrentLinkedQueue<Message> forACKs,
                   ConcurrentSkipListSet<String> ack,
                   int localPid, DatagramSocket socket,
@@ -48,7 +47,7 @@ public class Sender implements Runnable {
             }
         }
 
-        System.out.printf("%d:Sender is killed!", localPid);
+        System.out.printf("%d: Link Sender is killed!", localPid);
     }
 
     private void send(Message data) {

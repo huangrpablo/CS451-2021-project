@@ -1,11 +1,8 @@
 package cs451.link;
 
-import cs451.message.Message;
-import cs451.message.MessageType;
+import cs451.link.message.Message;
+import cs451.link.message.MessageType;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -16,12 +13,9 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Link {
-    private final List<Message> forSends;
+    private final ConcurrentLinkedQueue<Message> forSends;
     private final ConcurrentHashMap<String, Message> delivered;
-    private ConcurrentSkipListSet<String> ack;
-    private ConcurrentLinkedQueue<Message> forACKs;
 
-    private HashMap<Integer, InetSocketAddress> addresses;
     private DatagramSocket socket;
 
     private final Sender sender;
@@ -30,20 +24,17 @@ public class Link {
     private final int pid;
     private final AtomicInteger count;
 
-    private String output;
-
     public Link(int pid, HashMap<Integer, InetSocketAddress> addresses) {
         this.pid = pid;
         this.count = new AtomicInteger();
-        this.forSends = new ArrayList<>();
+        this.forSends = new ConcurrentLinkedQueue<>();
         this.delivered = new ConcurrentHashMap<>();
-        this.ack = new ConcurrentSkipListSet<>();
-        this.forACKs = new ConcurrentLinkedQueue<>();
-
-        this.addresses = addresses;
+        ConcurrentSkipListSet<String> ack = new ConcurrentSkipListSet<>();
+        ConcurrentLinkedQueue<Message> forACKs = new ConcurrentLinkedQueue<>();
 
         try {
-            int port = this.addresses.get(pid).getPort();
+            int port = addresses.get(pid).getPort();
+            System.out.printf("%d tries to bind on port %d\n", pid, port);
             this.socket = new DatagramSocket(port);
         } catch (SocketException e) {
             System.err.println(e);
@@ -53,9 +44,9 @@ public class Link {
         this.receiver = new Receiver(delivered, forACKs, ack, pid, socket);
     }
 
-    public Link(int pid, HashMap<Integer, InetSocketAddress> addresses, String output) {
+    public Link(int pid, HashMap<Integer, InetSocketAddress> addresses, Listener listener) {
         this(pid, addresses);
-        this.output = output;
+        this.receiver.setListener(listener);
     }
 
     public int getPid() {
@@ -65,11 +56,13 @@ public class Link {
     public void start() {
         new Thread(this.sender).start();
         new Thread(this.receiver).start();
-
-        System.out.printf("%d: Sender and receiver are started...\n", pid);
     }
 
     public void send(String payload, int destPid) {
+        if (destPid == pid) {
+            return;
+        }
+
         int id = count.getAndIncrement();
         Message data = new Message(id, MessageType.Data, pid, destPid, payload);
         forSends.add(data);
@@ -80,22 +73,22 @@ public class Link {
         this.receiver.kill();
     }
 
-    public void flush2File() {
-        try {
-            FileWriter fw = new FileWriter(output);
-            BufferedWriter bw = new BufferedWriter(fw);
+    public String broadcastLog() {
+        StringBuilder sb = new StringBuilder();
 
-            for (Message data: forSends) {
-                bw.write(data.broadcastLog() + "\n");
-            }
+        int current = count.get();
+        for (int i = 0; i < current; i++)
+            sb.append(String.format("b %d\n", i));
 
-            for (Message data: delivered.values()) {
-                bw.write(data.deliverLog() + "\n");
-            }
+        return sb.toString();
+    }
 
-            bw.close();
-        } catch (IOException e) {
-            System.err.println(e);
-        }
+    public String deliverLog() {
+        StringBuilder sb = new StringBuilder();
+
+        for (Message data : delivered.values())
+            sb.append(String.format("d %d %d\n", data.header.getSrcPid(), data.header.getId()));
+
+        return sb.toString();
     }
 }

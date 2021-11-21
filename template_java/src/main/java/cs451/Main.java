@@ -1,8 +1,12 @@
 package cs451;
 
+import cs451.broadcast.causal.FIFO;
 import cs451.link.Link;
+import cs451.link.message.Message;
 import cs451.utils.Generator;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
@@ -10,20 +14,35 @@ import java.nio.file.Path;
 import java.util.HashMap;
 
 public class Main {
-    private static Link link;
+    private static FIFO fifo;
+    private static String output;
 
     private static void handleSignal() {
         //immediately stop network packet processing
         System.out.println("Immediately stopping network packet processing.");
 
-        link.kill();
+        fifo.kill();
 
         //write/flush output file if necessary
         System.out.println("Writing output.");
 
-        link.flush2File();
+        flush2File();
 
         System.out.flush();
+    }
+
+    private static void flush2File() {
+        try {
+            FileWriter fw = new FileWriter(output);
+            BufferedWriter bw = new BufferedWriter(fw);
+
+            bw.write(fifo.broadcastLog());
+            bw.write(fifo.deliverLog());
+
+            bw.close();
+        } catch (IOException e) {
+            System.err.println(e);
+        }
     }
 
     private static void initSignalHandlers() {
@@ -35,8 +54,7 @@ public class Main {
         });
     }
 
-    private static Link initLink(Parser parser) {
-        int id = parser.myId();
+    private static FIFO initFIFO(Parser parser) {
         HashMap<Integer, InetSocketAddress> addresses = new HashMap<>();
         for (Host host: parser.hosts()) {
             InetSocketAddress address = new InetSocketAddress(
@@ -44,39 +62,26 @@ public class Main {
             addresses.put(host.getId(), address);
         }
 
-        Link link = new Link(id, addresses, parser.output());
+        FIFO fifo = new FIFO(parser.myId(), addresses);
 
-        System.out.printf("%d:Link is created successfully...\n", id);
-
-        // send messages
+        output = parser.output();
 
         int numOfMessage = 0;
-        int target = 0;
 
         try {
             String config = Files.readString(Path.of(parser.config()));
-            String[] configs = config.split(" ");
-            numOfMessage = Integer.parseInt(configs[0].strip());
-            target = Integer.parseInt(configs[1].strip());
+            numOfMessage = Integer.parseInt(config.strip());
         } catch (IOException e) {
             System.err.println(e);
             System.exit(-1);
         }
 
-        if (link.getPid() == target) {
-            return link;
-        }
-
-        System.out.printf("%d:Link is a sender...\n", id);
-
         String[] messages = Generator.range(0, numOfMessage);
         for (String message: messages) {
-            link.send(message, target);
+            fifo.broadcast(message);
         }
 
-        System.out.printf("%d:Link adds %d# messages to queue...\n", id, numOfMessage);
-
-        return link;
+        return fifo;
     }
 
     public static void main(String[] args) throws InterruptedException {
@@ -111,10 +116,10 @@ public class Main {
 
         System.out.println("Doing some initialization\n");
 
-        link = initLink(parser);
-        link.start();
+        fifo = initFIFO(parser);
+        fifo.start();
 
-        System.out.println("Broadcasting and delivering messages...\n");
+        System.out.println("FIFO starts...\n");
 
         // After a process finishes broadcasting,
         // it waits forever for the delivery of messages.

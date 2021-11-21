@@ -1,15 +1,13 @@
 package cs451.link;
 
-import cs451.message.Header;
-import cs451.message.Message;
-import cs451.message.MessageType;
+import cs451.link.message.Header;
+import cs451.link.message.Message;
+import cs451.link.message.MessageType;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -18,6 +16,8 @@ public class Receiver implements Runnable {
     private final ConcurrentHashMap<String, Message> delivered;
     private final ConcurrentLinkedQueue<Message> forACKs;
     private final ConcurrentSkipListSet<String> ack;
+
+    private Listener listener;
 
     private final int localPid;
 
@@ -37,7 +37,7 @@ public class Receiver implements Runnable {
         this.localPid = localPid;
         this.socket = socket;
 
-        System.out.printf("Start at %d", System.currentTimeMillis());
+        System.out.printf("Start at %d\n", System.currentTimeMillis());
     }
 
     @Override
@@ -79,8 +79,26 @@ public class Receiver implements Runnable {
                 header.getId()
         );
 
-        delivered.putIfAbsent(key, data);
+
+
+        if (!delivered.containsKey(key)) {
+            delivered.put(key, data);
+
+            onDelivery(data);
+        }
+
         ackIt(data);
+    }
+
+    private void onDelivery(Message data) {
+        if (listener == null) {
+            return;
+        }
+
+        int srcPid = data.header.getSrcPid();
+        String payload = data.payload;
+
+        listener.onDelivery(srcPid, payload);
     }
 
     private void ackIt(Message data) {
@@ -109,5 +127,9 @@ public class Receiver implements Runnable {
 
     public void kill() {
         this.stopped = true;
+    }
+
+    public void setListener(Listener listener) {
+        this.listener = listener;
     }
 }

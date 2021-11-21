@@ -1,4 +1,4 @@
-package cs451.message;
+package cs451.link.message;
 
 public class Message {
     public Header header;
@@ -48,7 +48,7 @@ public class Message {
     }
 
     public String broadcastLog() {
-        return String.format("b %d", header.getDestPid());
+        return String.format("b %d", header.getId());
     }
 
     public String deliverLog() {

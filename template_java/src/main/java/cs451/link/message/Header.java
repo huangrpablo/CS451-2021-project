@@ -1,4 +1,4 @@
-package cs451.message;
+package cs451.link.message;
 
 public class Header {
     private final int id;
